@@ -16,7 +16,7 @@ on:
   schedule:
     # 每天北京时间9点跑
     # Runs at 01:00 UTC (9:00 AM Beijing) every day
-    - cron:  '0 1 * * *'
+    - cron:  '*/1 * * * *'
 
 jobs:
   build:
@@ -47,7 +47,7 @@ jobs:
         # 指定目录cache
         cache_path: /github/workspace/uniartisan-cache
         # 白名单，仅同步白名单中的repos，如“repo1,repo2,repo3”
-        white_list: "adblock_list"
+        white_list: "adblock_list,CommentToMail,epaper_clock_4.2"
         # 仅同步静态列表，不会再动态获取需同步列表（黑白名单机制依旧生效）
         # static_list: "spark-example"
         # 强制更新
