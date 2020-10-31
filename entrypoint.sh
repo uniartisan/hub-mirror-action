@@ -33,9 +33,16 @@ STATIC_LIST="${INPUT_STATIC_LIST}"
 
 FORCE_UPDATE="${INPUT_FORCE_UPDATE}"
 
+DELAY_EXIT=false
+
 function err_exit {
   echo -e "\033[31m $1 \033[0m"
   exit 1
+}
+
+function delay_exit {
+  echo -e "\033[31m $1 \033[0m"
+  DELAY_EXIT=true
 }
 
 if [[ "$ACCOUNT_TYPE" == "org" ]]; then
@@ -68,8 +75,31 @@ else
   err_exit "Unknown src args, the `src` should be `[github|gittee]/account`"
 fi
 
+function get_all_repo_names
+{
+  PAGE_NUM=100
+  if [[ "$SRC_TYPE" == "github" ]]; then
+    total=`curl -sI "$SRC_REPO_LIST_API?page=1&per_page=$PAGE_NUM" | sed -nr "s/^[lL]ink:.*page=([0-9]+)&per_page=$PAGE_NUM.*/\1/p"`
+  elif [[ "$SRC_TYPE" == "gitee" ]]; then
+    total=`curl -sI "$SRC_REPO_LIST_API?page=1&per_page=$PAGE_NUM" | grep total_page: |cut -d ' ' -f2 |tr -d '\r'`
+  fi
+
+  # use pagination?
+  if [ -z "$total" ]; then
+      # no - this result has only one page
+      total=1
+  fi
+
+  p=1
+  while [ "$p" -le "$total" ]; do
+    x=`curl -s "$SRC_REPO_LIST_API?page=$p&per_page=$PAGE_NUM" | jq '.[] | .name' |  sed 's/"//g'`
+    echo $x
+    p=$(($p + 1))
+  done
+}
+
 if [[ -z $STATIC_LIST ]]; then
-  SRC_REPOS=`curl $SRC_REPO_LIST_API | jq '.[] | .name' |  sed 's/"//g'`
+  SRC_REPOS=`get_all_repo_names`
 else
   SRC_REPOS=`echo $STATIC_LIST | tr ',' ' '`
 fi
@@ -157,8 +187,12 @@ if [ ! -d "$CACHE_PATH" ]; then
 fi
 cd $CACHE_PATH
 
+all=0
+success=0
+skip=0
 for repo in $SRC_REPOS
 {
+  all=$(($all + 1))
   if test_black_white_list $repo ; then
     echo -e "\n\033[31mBackup $repo ...\033[0m"
 
@@ -168,8 +202,17 @@ for repo in $SRC_REPOS
 
     update_repo || echo "Update failed"
 
-    import_repo || err_exit "Push failed"
+    import_repo && success=$(($success + 1)) || delay_exit "Push failed"
 
     cd ..
+  else
+    skip=$(($skip + 1))
   fi
 }
+
+failed=$(($all - $skip - $success))
+echo "Total: $all, skip: $skip, successed: $success, failed: $failed."
+
+if [[ "$DELAY_EXIT" == "true" ]]; then
+  exit 1
+fi
